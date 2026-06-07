@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pro Camera App - Ultra Edition</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background-color: #000; font-family: -apple-system, BlinkMacSystemFont, sans-serif; display: flex; flex-direction: column; height: 100dvh; overflow: hidden; color: white; user-select: none; }
+        
+        .top-bar { display: flex; flex-direction: column; background: rgba(0,0,0,0.9); padding: 10px 15px; z-index: 10; gap: 10px; border-bottom: 1px solid #222; }
+        .top-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        
+        .mode-selector { display: flex; gap: 12px; font-size: 13px; letter-spacing: 1px; align-items: center; }
+        .mode-btn { background: none; border: none; color: #888; cursor: pointer; text-transform: uppercase; font-weight: bold; }
+        .mode-btn.active { color: #ffcc00; }
+
+        .live-group { display: flex; align-items: center; gap: 4px; position: relative; }
+        .live-menu-btn { background: rgba(255,255,255,0.1); border: none; color: #fff; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: background 0.2s; }
+        .live-menu-btn.active { background: #ffcc00; color: #000; }
+        
+        .dropdown-menu { position: absolute; top: 30px; left: 0; background: rgba(20,20,20,0.95); border: 1px solid #333; border-radius: 8px; padding: 5px; display: none; flex-direction: column; gap: 5px; z-index: 20; min-width: 100px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        .dropdown-menu.show { display: flex; }
+        .dropdown-item { background: none; border: none; color: #aaa; text-align: left; padding: 8px 10px; font-size: 12px; font-weight: bold; cursor: pointer; border-radius: 4px; }
+        .dropdown-item.active { background: #ffcc00; color: #000; }
+        
+        .right-controls { display: flex; gap: 8px; align-items: center; }
+        .switch-btn, .flash-btn, .clear-btn { background: rgba(255, 255, 255, 0.15); border: none; color: white; padding: 6px 10px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; }
+        .flash-btn.active { background: #ffcc00; color: black; }
+        .clear-btn { background: rgba(255, 59, 48, 0.3); color: #ff3b30; }
+
+        .camera-container { position: relative; width: 100%; flex-grow: 1; background-color: #111; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        video, canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; }
+        video.nitido-mode { filter: contrast(1.25) saturate(1.25) brightness(1.02); }
+        .live-indicator { position: absolute; top: 15px; right: 15px; background: rgba(255, 204, 0, 0.9); color: black; padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; display: none; z-index: 5; }
+        .live-structure-badge { position: absolute; bottom: 15px; left: 15px; background: rgba(0, 0, 0, 0.6); color: #ffcc00; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; z-index: 5; border: 1px solid rgba(255,204,0,0.3); text-transform: uppercase; }
+
+        .screen-flash-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-color: #fff; z-index: 4; opacity: 0; pointer-events: none; transition: opacity 0.05s ease; }
+        .screen-flash-overlay.active { opacity: 1; }
+
+        .gallery-container { width: 100%; height: 95px; background: rgba(0,0,0,0.95); display: flex; align-items: center; padding: 0 15px; gap: 12px; overflow-x: auto; border-bottom: 1px solid #222; flex-shrink: 0; }
+        .gallery-item { position: relative; width: 65px; height: 65px; flex-shrink: 0; border-radius: 8px; border: 2px solid #fff; overflow: hidden; background: #000; cursor: pointer; }
+        .gallery-thumb-bg { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+        .gallery-thumb-canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; z-index: 2; transition: opacity 0.4s ease; }
+        .gallery-thumb-canvas.fade-out { opacity: 0; }
+
+        .download-btn { position: absolute; bottom: 2px; right: 2px; background: rgba(0, 0, 0, 0.75); color: #fff; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; font-weight: bold; display: flex; justify-content: center; align-items: center; cursor: pointer; z-index: 4; transition: all 0.1s; }
+        
+        .controls { width: 100%; height: 95px; background-color: #000; display: flex; justify-content: center; align-items: center; z-index: 10; flex-shrink: 0; padding-bottom: 10px; }
+        .capture-btn { width: 68px; height: 68px; border-radius: 50%; background-color: transparent; border: 4px solid #fff; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: all 0.2s; }
+        .capture-btn-inner { width: 52px; height: 52px; border-radius: 50%; background-color: #fff; transition: all 0.2s; }
+        .capture-btn.live .capture-btn-inner { background-color: #ffcc00; }
+        .capture-btn.recording .capture-btn-inner { border-radius: 8px; transform: scale(0.6); }
+
+        .modal-viewer { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background-color: #000; z-index: 100; display: none; flex-direction: column; justify-content: center; align-items: center; }
+        .modal-media-container { position: relative; width: 100%; flex-grow: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        .modal-close-btn { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.25); border: none; color: white; padding: 8px 14px; border-radius: 20px; font-size: 13px; z-index: 110; }
+        .modal-img-bg { position: absolute; max-width: 100%; max-height: 100%; object-fit: contain; z-index: 101; }
+        .modal-canvas-fg { position: absolute; max-width: 100%; max-height: 100%; object-fit: contain; z-index: 102; transition: opacity 0.4s ease; }
+        .modal-canvas-fg.fade-out { opacity: 0; }
+
+        .quality-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; background: rgba(0,0,0,0.85); z-index: 150; display: none; justify-content: center; align-items: center; }
+        .quality-box { background: #1a1a1a; border-radius: 16px; padding: 20px; width: 80%; max-width: 300px; display: flex; flex-direction: column; gap: 10px; text-align: center; border: 1px solid #333; }
+        .quality-box h3 { font-size: 16px; margin-bottom: 10px; color: #fff; }
+        .quality-btn { background: #2a2a2a; color: #fff; border: 1px solid #444; padding: 12px; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .quality-btn:hover { background: #ffcc00; color: #000; }
+        .quality-btn.cancel { background: rgba(255, 59, 48, 0.2); color: #ff3b30; margin-top: 5px; border: none; }
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="top-row">
+            <div class="mode-selector">
+                <button class="mode-btn active" onclick="changeMode('normal')">Normal</button>
+                <button class="mode-btn" onclick="changeMode('nitido')">Nítido</button>
+                <div class="live-group">
+                    <button id="btn-live" class="mode-btn" onclick="changeMode('movimiento')">Live</button>
+                    <button id="btn-live-menu" class="live-menu-btn" onclick="toggleDropdown()">▼</button>
+                    <div id="dropdown" class="dropdown-menu">
+                        <button class="dropdown-item active" onclick="setLiveStruct('inicial')">Inicial</button>
+                        <button class="dropdown-item" onclick="setLiveStruct('final')">Final</button>
+                        <button class="dropdown-item" onclick="setLiveStruct('centrada')">Centrada</button>
+                    </div>
+                </div>
+            </div>
+            <div class="right-controls">
+                <button id="btn-flash" class="flash-btn">⚡ Flash: OFF</button>
+                <button id="btn-switch" class="switch-btn">Girar ↻</button>
+                <button class="clear-btn" onclick="clearGallery()">Limpiar 🗑</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="camera-container">
+        <div id="live-indicator" class="live-indicator">LIVE O</div>
+        <div id="live-badge" class="live-structure-badge" style="display:none;">MODO: INICIAL</div>
+        <div id="screen-flash" class="screen-flash-overlay"></div>
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div class="gallery-container" id="gallery"></div>
+
+    <div class="controls">
+        <button id="btn-capture" class="capture-btn"><div class="capture-btn-inner"></div></button>
+    </div>
+
+    <div id="modalViewer" class="modal-viewer">
+        <button class="modal-close-btn" onclick="closeModal()">✕ Cerrar</button>
+        <div class="modal-media-container" id="modalMediaContainer"></div>
+    </div>
+
+    <div id="qualityModal" class="quality-modal">
+        <div class="quality-box">
+            <h3>Resolución de Exportación</h3>
+            <button class="quality-btn" onclick="executeDownload(0.5, 2000000)">Normal (Rapida)</button>
+            <button class="quality-btn" onclick="executeDownload(1.0, 4000000)">HD (Nativa)</button>
+            <button class="quality-btn" onclick="executeDownload(1.5, 6000000)">+HD (Mejorada)</button>
+            <button class="quality-btn" onclick="executeDownload(2.0, 8000000)">FHD (Máxima)</button>
+            <button class="quality-btn cancel" onclick="closeQualityModal()">Cancelar</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const btnCapture = document.getElementById('btn-capture');
+        const btnFlash = document.getElementById('btn-flash');
+        const screenFlash = document.getElementById('screen-flash');
+        const gallery = document.getElementById('gallery');
+        const liveIndicator = document.getElementById('live-indicator');
+        const liveBadge = document.getElementById('live-badge');
+        const dropdown = document.getElementById('dropdown');
+        const qualityModal = document.getElementById('qualityModal');
+        
+        let currentMode = 'normal', isRecordingLive = false, currentStream = null, facingMode = "environment"; 
+        let isFlashActive = false, finalMimeType = 'video/mp4';
+        let liveStructure = 'inicial'; // 'inicial', 'final', 'centrada'
+        
+        let miniPlaybackIntervals = [], modalPlaybackInterval = null;
+        let pendingDownloadItem = null, pendingDownloadBtn = null;
+
+        // Base de datos IndexedDB para guardado mejorado
+        let db;
+        const requestDB = indexedDB.open("ProCameraGalleryDB", 1);
+        requestDB.onupgradeneeded = (e) => {
+            db = e.target.result;
+            if (!db.objectStoreNames.contains('media')) {
+                db.createObjectStore('media', { keyPath: 'id', autoIncrement: true });
+            }
+        };
+        requestDB.onsuccess = (e) => {
+            db = e.target.result;
+            loadGalleryFromDB();
+        };
+
+        window.addEventListener('DOMContentLoaded', () => { startCamera(); });
+
+        async function startCamera() {
+            if (currentStream) { currentStream.getTracks().forEach(track => track.stop()); }
+            const constraints = { video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: facingMode, frameRate: { ideal: 30 } }, audio: false };
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                video.style.transform = (facingMode === "user") ? "scaleX(-1)" : "scaleX(1)";
+                
+                if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1.42E01E')) finalMimeType = 'video/mp4';
+                else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) finalMimeType = 'video/webm';
+
+                // Si el flash estaba encendido, reaplicarlo al hardware inmediatamente
+                if (isFlashActive && facingMode === "environment") {
+                    const track = currentStream.getVideoTracks()[0];
+                    if (track.getCapabilities().torch) {
+                        await track.applyConstraints({ advanced: [{ torch: true }] });
+                    }
+                }
+            } catch (err) { alert("Error de cámara: " + err); }
+        }
+
+        document.getElementById('btn-switch').addEventListener('click', () => { facingMode = (facingMode === "environment") ? "user" : "environment"; startCamera(); });
+        
+        btnFlash.addEventListener('click', async () => {
+            isFlashActive = !isFlashActive;
+            btnFlash.className = isFlashActive ? 'flash-btn active' : 'flash-btn';
+            btnFlash.innerHTML = isFlashActive ? '⚡ Flash: ON' : '⚡ Flash: OFF';
+            
+            // Flash físico instantáneo
+            if (facingMode === "environment" && currentStream) {
+                const track = currentStream.getVideoTracks()[0];
+                if (track.getCapabilities().torch) {
+                    try { await track.applyConstraints({ advanced: [{ torch: isFlashActive }] }); } catch(e){}
+                }
+            }
+        });
+
+        function changeMode(mode) {
+            currentMode = mode; 
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active')); 
+            event.target.classList.add('active');
+            video.className = (mode === 'nitido') ? 'nitido-mode' : '';
+            btnCapture.className = (mode === 'movimiento') ? 'capture-btn live' : 'capture-btn';
+            liveBadge.style.display = (mode === 'movimiento') ? 'block' : 'none';
+        }
+
+        function toggleDropdown() { dropdown.classList.toggle('show'); }
+        function setLiveStruct(struct) {
+            liveStructure = struct;
+            document.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+            liveBadge.innerHTML = `MODO: ${struct}`;
+            dropdown.classList.remove('show');
+        }
+
+        async function triggerScreenFlash() {
+            if (!isFlashActive || facingMode === "environment") return;
+            screenFlash.classList.add('active'); 
+            setTimeout(() => { screenFlash.classList.remove('active'); }, currentMode === 'movimiento' ? 600 : 200);
+        }
+
+        btnCapture.addEventListener('click', () => { triggerScreenFlash(); if (currentMode === 'movimiento') runLivePhotoMode(); else takeStandardPhoto(); });
+
+        function captureFrameAsDataURL() {
+            const canvas = document.createElement('canvas'); const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth || 1280; canvas.height = video.videoHeight || 720;
+            if (facingMode === "user") { context.translate(canvas.width, 0); context.scale(-1, 1); }
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/jpeg', 0.85);
+        }
+
+        function takeStandardPhoto() {
+            setTimeout(() => {
+                const imgData = captureFrameAsDataURL();
+                const item = { type: 'image', mainSrc: imgData, timestamp: Date.now() };
+                saveToDB(item);
+            }, 60);
+        }
+
+        function runLivePhotoMode() {
+            if (isRecordingLive) return; isRecordingLive = true;
+            btnCapture.classList.add('recording');
+            
+            const framesBurst = [];
+            const photoInicial = captureFrameAsDataURL(); // Foto al tocar
+            let photoMid = null, photoEnd = null;
+            
+            liveIndicator.style.display = 'block';
+
+            const capCanvas = document.createElement('canvas'); const capCtx = capCanvas.getContext('2d');
+            capCanvas.width = video.videoWidth || 640; capCanvas.height = video.videoHeight || 360;
+
+            let elapsedTime = 0;
+            const recordInterval = setInterval(() => {
+                elapsedTime += 40;
+                
+                if (facingMode === "user") {
+                    capCtx.clearRect(0,0,capCanvas.width,capCanvas.height);
+                    capCtx.translate(capCanvas.width, 0); capCtx.scale(-1, 1);
+                    capCtx.drawImage(video, 0, 0, capCanvas.width, capCanvas.height);
+                    capCtx.setTransform(1,0,0,1,0,0);
+                } else {
+                    capCtx.drawImage(video, 0, 0, capCanvas.width, capCanvas.height);
+                }
+                framesBurst.push(capCanvas.toDataURL('image/jpeg', 0.70));
+
+                if (elapsedTime === 1000) { photoMid = captureFrameAsDataURL(); } // Foto a la mitad
+            }, 40);
+
+            setTimeout(() => {
+                clearInterval(recordInterval);
+                photoEnd = captureFrameAsDataURL(); // Foto al final
+                liveIndicator.style.display = 'none';
+                btnCapture.classList.remove('recording');
+                isRecordingLive = false;
+
+                const item = { 
+                    type: 'live', struct: liveStructure, 
+                    photoStart: photoInicial, photoMid: photoMid, photoEnd: photoEnd, 
+                    frames: framesBurst, timestamp: Date.now() 
+                };
+                saveToDB(item);
+            }, 2000);
+        }
+
+        function saveToDB(item) {
+            const tx = db.transaction('media', 'readwrite');
+            const store = tx.objectStore('media');
+            store.add(item).onsuccess = (e) => {
+                item.id = e.target.result;
+                appendThumbnail(item, true);
+            };
+        }
+
+        function loadGalleryFromDB() {
+            gallery.innerHTML = '';
+            const tx = db.transaction('media', 'readonly');
+            const store = tx.objectStore('media');
+            store.openCursor(null, 'prev').onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) { appendThumbnail(cursor.value, false); cursor.continue(); }
+            };
+        }
+
+        function clearGallery() {
+            if (confirm("¿Borrar todo permanentemente?")) {
+                miniPlaybackIntervals.forEach(clearInterval); miniPlaybackIntervals = [];
+                const tx = db.transaction('media', 'readwrite');
+                tx.objectStore('media').clear();
+                gallery.innerHTML = '';
+            }
+        }
+
+        function appendThumbnail(item, isNew = false) {
+            const itemContainer = document.createElement('div'); itemContainer.classList.add('gallery-item');
+            
+            // Decidir qué foto mostrar según la estructura seleccionada
+            let displayPhoto = item.mainSrc;
+            if (item.type === 'live') {
+                if(item.struct === 'inicial') displayPhoto = item.photoStart;
+                else if(item.struct === 'final') displayPhoto = item.photoEnd;
+                else displayPhoto = item.photoMid;
+            }
+
+            const bgImg = document.createElement('img'); bgImg.src = displayPhoto; bgImg.classList.add('gallery-thumb-bg');
+            itemContainer.appendChild(bgImg);
+
+            if (item.type === 'live' && item.frames) {
+                const thumbCanvas = document.createElement('canvas'); thumbCanvas.classList.add('gallery-thumb-canvas');
+                itemContainer.appendChild(thumbCanvas);
+                const tCtx = thumbCanvas.getContext('2d');
+
+                const imgLoader = new Image(); imgLoader.src = item.frames[0];
+                imgLoader.onload = () => {
+                    thumbCanvas.width = imgLoader.width; thumbCanvas.height = imgLoader.height;
+                    let frameIdx = 0; let isPlayingIndex = true;
+                    const playCycle = () => {
+                        if (isPlayingIndex) {
+                            const frameImg = new Image(); frameImg.src = item.frames[frameIdx];
+                            frameImg.onload = () => { tCtx.clearRect(0,0,thumbCanvas.width,thumbCanvas.height); tCtx.drawImage(frameImg, 0, 0); };
+                            frameIdx++;
+                            if (frameIdx >= item.frames.length) {
+                                isPlayingIndex = false; thumbCanvas.classList.add('fade-out');
+                                setTimeout(() => { frameIdx = 0; isPlayingIndex = true; thumbCanvas.classList.remove('fade-out'); }, 3500);
+                            }
+                        }
+                    };
+                    miniPlaybackIntervals.push(setInterval(playCycle, 45));
+                };
+            }
+
+            const downloadBtn = document.createElement('button');
+            downloadBtn.classList.add('download-btn'); downloadBtn.innerHTML = '↓';
+            
+            downloadBtn.onclick = (e) => {
+                e.stopPropagation();
+                if (item.type === 'image') {
+                    const a = document.createElement('a'); a.href = item.mainSrc; a.download = `Foto_${item.timestamp}.jpg`; a.click();
+                } else {
+                    pendingDownloadItem = item; pendingDownloadBtn = downloadBtn;
+                    qualityModal.style.display = 'flex';
+                }
+            };
+
+            itemContainer.appendChild(downloadBtn);
+            itemContainer.onclick = () => { openModal(item); };
+            if (isNew) gallery.insertBefore(itemContainer, gallery.firstChild);
+            else gallery.appendChild(itemContainer);
+        }
+
+        function closeQualityModal() { qualityModal.style.display = 'none'; }
+
+        async function executeDownload(scaleFactor, bitrate) {
+            closeQualityModal();
+            const item = pendingDownloadItem; const btn = pendingDownloadBtn;
+            if (!item || !btn) return;
+
+            btn.disabled = true; btn.innerHTML = '';
+            
+            const nativeCanvas = document.createElement('canvas'); const nCtx = nativeCanvas.getContext('2d');
+            
+            // Determinar imagen base para las pausas
+            let basePhotoSrc = item.photoStart;
+            if(item.struct === 'final') basePhotoSrc = item.photoEnd;
+            if(item.struct === 'centrada') basePhotoSrc = item.photoMid;
+
+            const baseImgObj = new Image(); baseImgObj.src = basePhotoSrc;
+            await new Promise(r => baseImgObj.onload = r);
+            
+            // Aplicar escala de calidad elegida
+            nativeCanvas.width = baseImgObj.width * scaleFactor; 
+            nativeCanvas.height = baseImgObj.height * scaleFactor;
+
+            const preloadedFrames = [];
+            for (let src of item.frames) {
+                const img = new Image(); img.src = src;
+                await new Promise(r => img.onload = r);
+                preloadedFrames.push(img);
+            }
+
+            const streamRender = nativeCanvas.captureStream(30);
+            const recCompiler = new MediaRecorder(streamRender, { mimeType: finalMimeType, videoBitsPerSecond: bitrate });
+            const finalChunks = [];
+
+            recCompiler.ondataavailable = ev => { if(ev.data.size > 0) finalChunks.push(ev.data); };
+            recCompiler.onstop = () => {
+                const compiledBlob = new Blob(finalChunks, { type: finalMimeType });
+                const ext = finalMimeType.includes('webm') ? 'webm' : 'mp4';
+                const a = document.createElement('a'); a.href = URL.createObjectURL(compiledBlob);
+                a.download = `Live_${item.struct.toUpperCase()}_${Date.now()}.${ext}`; a.click();
+                btn.style.background = 'rgba(0,0,0,0.75)'; btn.innerHTML = '↓'; btn.disabled = false;
+            };
+
+            recCompiler.start();
+            
+            const totalDuration = 5900; let startTime = performance.now();
+
+            function drawFrame(now) {
+                let elapsed = now - startTime;
+                
+                // Actualizar barra de progreso circular en el botón
+                let progressPercent = Math.min((elapsed / totalDuration) * 100, 100);
+                btn.style.background = `conic-gradient(#ffcc00 ${progressPercent}%, rgba(0,0,0,0.8) 0)`;
+
+                if (elapsed >= totalDuration) {
+                    nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height);
+                    setTimeout(() => { recCompiler.stop(); }, 40);
+                    return;
+                }
+
+                nCtx.clearRect(0, 0, nativeCanvas.width, nativeCanvas.height);
+                const frameLen = preloadedFrames.length - 1;
+
+                if (item.struct === 'inicial') {
+                    if (elapsed < 3500) { nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 3500 && elapsed < 3900) { let p = (elapsed - 3500)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = p; nCtx.drawImage(preloadedFrames[0], 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 3900 && elapsed < 5500) { let pV = (elapsed - 3900)/1600; let idx = Math.floor(pV * frameLen); nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[idx], 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else { let pF = (elapsed - 5500)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[frameLen], 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = pF; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); }
+                } 
+                else if (item.struct === 'final') {
+                    if (elapsed < 1600) { let pV = elapsed/1600; let idx = Math.floor(pV * frameLen); nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[idx], 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 1600 && elapsed < 2000) { let p = (elapsed - 1600)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[frameLen], 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = p; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 2000 && elapsed < 5500) { nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else { let pF = (elapsed - 5500)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = pF; nCtx.drawImage(preloadedFrames[0], 0, 0, nativeCanvas.width, nativeCanvas.height); }
+                }
+                else if (item.struct === 'centrada') {
+                    let midIdx = Math.floor(frameLen / 2);
+                    if (elapsed < 800) { let pV = elapsed/800; let idx = midIdx + Math.floor(pV * (frameLen - midIdx)); nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[idx], 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 800 && elapsed < 1200) { let p = (elapsed - 800)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[frameLen], 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = p; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 1200 && elapsed < 4700) { nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); } 
+                    else if (elapsed >= 4700 && elapsed < 5100) { let pF = (elapsed - 4700)/400; nCtx.globalAlpha = 1.0; nCtx.drawImage(baseImgObj, 0, 0, nativeCanvas.width, nativeCanvas.height); nCtx.globalAlpha = pF; nCtx.drawImage(preloadedFrames[0], 0, 0, nativeCanvas.width, nativeCanvas.height); }
+                    else { let pV = (elapsed - 5100)/800; let idx = Math.floor(pV * midIdx); nCtx.globalAlpha = 1.0; nCtx.drawImage(preloadedFrames[idx], 0, 0, nativeCanvas.width, nativeCanvas.height); }
+                }
+
+                requestAnimationFrame(drawFrame);
+            }
+            requestAnimationFrame(drawFrame);
+        }
+
+        // --- Visor Modal ---
+        function openModal(item) {
+            const modalViewer = document.getElementById('modalViewer'); const modalMediaContainer = document.getElementById('modalMediaContainer');
+            if (modalPlaybackInterval) { clearInterval(modalPlaybackInterval); clearTimeout(modalPlaybackInterval); }
+            modalMediaContainer.innerHTML = '';
+            
+            let displayPhoto = item.mainSrc;
+            if (item.type === 'live') {
+                if(item.struct === 'inicial') displayPhoto = item.photoStart;
+                else if(item.struct === 'final') displayPhoto = item.photoEnd;
+                else displayPhoto = item.photoMid;
+            }
+
+            const modalBg = document.createElement('img'); modalBg.src = displayPhoto; modalBg.classList.add('modal-img-bg');
+            modalMediaContainer.appendChild(modalBg);
+
+            if (item.type === 'live' && item.frames) {
+                const modalCanvas = document.createElement('canvas'); modalCanvas.classList.add('modal-canvas-fg');
+                modalMediaContainer.appendChild(modalCanvas); const mCtx = modalCanvas.getContext('2d');
+                const imgLoader = new Image(); imgLoader.src = item.frames[0];
+                imgLoader.onload = () => {
+                    modalCanvas.width = imgLoader.width; modalCanvas.height = imgLoader.height;
+                    let frameIdx = 0; let isPlayingModal = true;
+                    const modalCycle = () => {
+                        if (isPlayingModal) {
+                            const fImg = new Image(); fImg.src = item.frames[frameIdx];
+                            fImg.onload = () => { mCtx.clearRect(0,0,modalCanvas.width,modalCanvas.height); mCtx.drawImage(fImg, 0, 0); };
+                            frameIdx++;
+                            if (frameIdx >= item.frames.length) { isPlayingModal = false; modalCanvas.classList.add('fade-out'); modalPlaybackInterval = setTimeout(() => { frameIdx = 0; isPlayingModal = true; modalCanvas.classList.remove('fade-out'); }, 3500); }
+                        }
+                    };
+                    modalPlaybackInterval = setInterval(modalCycle, 45);
+                };
+            }
+            modalViewer.style.display = 'flex';
+        }
+        function closeModal() { if (modalPlaybackInterval) { clearInterval(modalPlaybackInterval); clearTimeout(modalPlaybackInterval); } document.getElementById('modalViewer').style.display = 'none'; }
+    </script>
+</body>
+</html>
